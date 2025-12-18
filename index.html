@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Real-Time Stock Tracker</title>
+    <style>
+        :root {
+            --bg: #0b1220;
+            --panel: #101a30;
+            --panel2: #0f1730;
+            --text: #e7ecff;
+            --muted: #9aa7c7;
+            --border: rgba(255,255,255,.10);
+            --up: #25d695;
+            --down: #ff5a7a;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            background: radial-gradient(1200px 800px at 20% 0%, #182854 0%, var(--bg) 55%);
+            color: var(--text);
+        }
+        .wrap { max-width: 980px; margin: 0 auto; padding: 28px 16px; }
+        header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+        .status { color: var(--muted); font-size: 13px; }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        @media (min-width: 860px) {
+            .grid { grid-template-columns: 1fr 1fr; }
+        }
+        .card {
+            background: linear-gradient(180deg, var(--panel) 0%, var(--panel2) 100%);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px;
+        }
+        h2 { margin: 0 0 10px 0; font-size: 15px; color: var(--muted); font-weight: 600; }
+        ul { list-style: none; padding: 0; margin: 0; }
+        li {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 10px;
+            border-radius: 10px;
+        }
+        li + li { margin-top: 6px; }
+        .row { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
+        .sym { font-weight: 650; letter-spacing: .3px; }
+        .meta { color: var(--muted); font-variant-numeric: tabular-nums; }
+        .pct.up { color: var(--up); }
+        .pct.down { color: var(--down); }
+        .hint { margin-top: 10px; color: var(--muted); font-size: 12px; }
+        a { color: inherit; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <header>
+            <h1>Real-Time Stock Tracker</h1>
+            <div class="status" id="status">Connecting…</div>
+        </header>
+
+        <div class="grid">
+            <section class="card">
+                <h2>Variation Leaderboard</h2>
+                <ul id="list"></ul>
+                <div class="hint">Tip: set STOCK_SYMBOLS and POLL_SECONDS in the server.</div>
+            </section>
+
+            <section class="card">
+                <h2>Real-Time Updates</h2>
+                <ul id="updates-list"></ul>
+                <div class="hint">Updates appear here as the server polls.</div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const wsScheme = (location.protocol === 'https:') ? 'wss' : 'ws';
+        const wsUrl = `${wsScheme}://${location.host}/ws`;
+        const ws = new WebSocket(wsUrl);
+        const list = document.getElementById('list');
+        const updatesList = document.getElementById('updates-list');
+
+        ws.onopen = () => statusEl.textContent = 'Connected';
+        ws.onclose = () => statusEl.textContent = 'Disconnected';
+        ws.onerror = () => statusEl.textContent = 'WebSocket Error';
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            const li = document.createElement('li');
+            li.className = 'row';
+            const pctClass = (data.change >= 0) ? 'up' : 'down';
+            li.innerHTML = `
+                <span class="sym">${data.symbol}</span>
+                <span class="meta">$${Number(data.price).toFixed(2)} · <span class="pct ${pctClass}">${Number(data.change).toFixed(2)}%</span></span>
+            `;
+            updatesList.insertBefore(li, updatesList.firstChild);
+            while (updatesList.children.length > 25) updatesList.removeChild(updatesList.lastChild);
+        };
+
+        async function loadLeaderboard() {
+            const response = await fetch('/leaderboard');
+            const data = await response.json();
+            list.innerHTML = '';
+            data.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'row';
+                const symbol = (typeof item.Member !== 'undefined') ? item.Member : item.member;
+                const score = (typeof item.Score !== 'undefined') ? item.Score : item.score;
+                const pctClass = (Number(score) >= 0) ? 'up' : 'down';
+                li.innerHTML = `
+                    <span class="sym">${symbol}</span>
+                    <span class="meta"><span class="pct ${pctClass}">${Number(score).toFixed(2)}%</span></span>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        setInterval(loadLeaderboard, 5000);
+        loadLeaderboard();
+    </script>
+</body>
+</html>
